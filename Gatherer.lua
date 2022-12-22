@@ -49,6 +49,17 @@ StaticPopupDialogs["GATHERER_VERSION_DIALOG"] = {
 --- ************************************************************************
 -- Utilities
 
+function Gatherer_GetZoneName(contientn, zone)
+	local zones = {GetMapZones(contientn)};
+	return zones[zone];
+end
+
+function Gatherer_GetZoneRegionData(continent, zone)
+	local c = GatherRegionData[continent];
+	if (not c) then return nil; end
+	return c.zones[Gatherer_GetZoneName(continent, zone)];
+end
+
 function Gatherer_Round(x)
 	if( x - math.floor(x) > 0.5) then
 		x = x + 0.5;
@@ -462,7 +473,7 @@ function Gatherer_OnEvent(event)
 				end
 
 				Gatherer_MapOpen = true;
-				if ( GetCurrentMapContinent()>0 and startZone and startZone > 0 ) then
+				if ( GetCurrentMapContinent()>0 and startZone ) then
 					SetMapZoom(startContinent, startZone);
 				end
 			end
@@ -817,7 +828,7 @@ function Gatherer_OnUpdate(timeDelta, force)
 		GatherNotes.timeDiff = 0;
 		-- Find the closest gathers
 		local continent, zone = Gatherer_GetCurrentZone();
-		if ((continent == 0) or (zone == 0)) then
+		if ((continent == 0)) then
 			Gatherer_HideAll();
 			return;
 		end
@@ -1027,7 +1038,7 @@ function GatherMain_Draw()
 	if ((Gatherer_MapOpen) and (SETTINGS.useMainmap)) then
 		local mapContinent = GetCurrentMapContinent();
 		local mapZone = GetCurrentMapZone();
-		if ((mapContinent > 0) and (mapZone > 0) and (GatherItems[mapContinent]) and (GatherItems[mapContinent][mapZone])) then
+		if ((mapContinent > 0) and (GatherItems[mapContinent]) and (GatherItems[mapContinent][mapZone])) then
 			for gatherName, gatherData in GatherItems[mapContinent][mapZone] do
 				local gatherType = "Default";
 				local specificType = "";
@@ -1216,7 +1227,7 @@ function Gatherer_FindClosest(num, interested)
 
 	local continent, zone = Gatherer_GetCurrentZone();
 
-	if ((continent == 0) or (zone == 0)) then return gatherLocal; end
+	if ((continent == 0)) then return gatherLocal; end
 
 	local px,py = Gatherer_PlayerPos();
 	if ((px == 0) and (py == 0)) then return gatherLocal; end
@@ -1397,7 +1408,10 @@ end
 
 function Gatherer_AbsCoord(continent, zone, x, y)
 	if ((continent == 0) or (zone == 0)) then return x, y; end
-	local r = GatherRegionData[continent][zone];
+
+	local r = Gatherer_GetZoneRegionData(continent, zone)
+	if (not r) then return x, y; end
+
 	local absX = x * r.scale + r.xoffset;
 	local absY = y * r.scale + r.yoffset;
 	return absX, absY;
@@ -1678,7 +1692,7 @@ function Gatherer_AddGatherHere(gather, gatherType, gatherIcon, gatherEventType)
 		return;
 	end
 	local gatherContinent, gatherZone = Gatherer_GetCurrentZone();
-	if (gatherContinent == 0 or gatherZone == 0) then
+	if (gatherContinent == 0) then
 		--Gatherer_Print("Gatherer: Cannot record item, invalid continent/zone.");
 		return;
 	end
@@ -1821,12 +1835,7 @@ end
 
 function Gatherer_GetCurrentZone()
 	-- type: () -> Tuple[Continent, Zone]
-	local zoneData = GatherZoneData[GetRealZoneText()];
-	if ( zoneData ) then
-		return zoneData[1], zoneData[2];
-	else
-		return 0,0;
-	end
+	return GetCurrentMapContinent(), GetCurrentMapZone();
 end
 
 Gatherer_LastZone = {};
@@ -1841,10 +1850,10 @@ function Gatherer_ChangeMap()
 
 	local playerContinent, playerZone = Gatherer_GetCurrentZone();
 	Gatherer_LastZone = { continent = playerContinent, zone = playerZone };
-	if ((playerContinent == 0) or (playerZone == 0)) then return false; end
+	if ((playerContinent == 0)) then return false; end
 	if ((playerContinent == mapContinent) and (playerZone == mapZone)) then return true; end
 
-	if ( GetCurrentMapContinent()>0 and playerZone and playerZone > 0 ) then
+	if ( GetCurrentMapContinent()>0 and playerZone ) then
 		if (not WorldMapFrame:IsVisible()) then
 			SetMapZoom(playerContinent, playerZone);
 		end
