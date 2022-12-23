@@ -1833,7 +1833,7 @@ function Gatherer_AddGatherToBase(gather, gatherType, gatherC, gatherZ, gatherX,
   -- Also it has started to return whether new node was found.
   local continentName = Gatherer_GetContinentName(gatherC)
   local zoneName = Gatherer_GetZoneName(gatherC, gatherZ)
-  print(continentName .. " : " .. zoneName)
+	
   if (not GatherItems[continentName]) then GatherItems[continentName] = {}; end
   if (not GatherItems[continentName][zoneName]) then
     GatherItems[continentName][zoneName] = {};
