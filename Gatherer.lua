@@ -1,6 +1,6 @@
 -- Gatherer
 -- Written by Chandora
-GATHERER_VERSION = "1.0.0";
+GATHERER_VERSION = "2.0.0";
 
 --
 -- Look, seriously a full half of this code is from MapNotes.
@@ -48,15 +48,81 @@ StaticPopupDialogs["GATHERER_VERSION_DIALOG"] = {
 --- ************************************************************************
 -- Utilities
 
-function Gatherer_GetZoneName(contientn, zone)
-  local zones = { GetMapZones(contientn) };
-  return zones[zone];
+function deep_merge(t1, t2, depth)
+  local merged = {}
+  for k, v in pairs(t1) do merged[k] = v end
+  for k, v in pairs(t2) do
+    if depth > 0 and type(v) == "table" and type(merged[k]) == "table" then
+      merged[k] = deep_merge(merged[k], v, depth - 1)
+    elseif depth == 0 and type(v) == "table" and type(merged[k]) == "table" then
+      if (merged[k]) then
+        table.insert(merged, v)
+      else
+        merged[k] = v
+      end
+    else
+      merged[k] = v
+    end
+  end
+  return merged
+end
+
+local VanillaContinentData = { "Kalimdor", "Eastern Kingdoms" }
+local VanillaZoneData = {
+  ["Kalimdor"] = {
+    "Ashenvale", "Aszhara", "Darkshore", "Darnassus", "Desolace", "Durotar",
+    "Dustwallow Marsh", "Felwood", "Feralas", "Moonglade", "Mulgore",
+    "Ogrimmar", "Silithus", "Stonetalon Mountains", "Tanaris", "Teldrassil",
+    "The Barrens", "Thousand Needles", "Thunder Bluff", "Un'Goro Crater",
+    "Winterspring",
+  },
+  ["Eastern Kingdoms"] = {
+    "Alterac Mountains", "Arathi Highlands", "Badlands", "Blasted Lands",
+    "Burning Steppes", "Deadwind Pass", "Dun Morogh", "Duskwood",
+    "Eastern Plaguelands", "Elwynn Forest", "Hillsbrad Foothills", "Ironforge",
+    "Loch Modan", "Redridge Mountains", "Searing Gorge", "Silverpine Forest",
+    "Stormwind City", "Stranglethorn Vale", "Swamp of Sorrows",
+    "The Hinterlands", "Tirisfal Glades", "Undercity", "Western Plaguelands",
+    "Westfall", "Wetlands",
+  },
+}
+
+function Gatherer_migrateData()
+  for continent, continentData in GatherItems do
+    if (type(continent) == "number") then
+      local continentName = VanillaContinentData[continent];
+      if (continentName) then
+        if (not GatherItems[continentName]) then
+          GatherItems[continentName] = {}
+        end
+        GatherItems[continentName] = deep_merge(GatherItems[continentName],
+                                                continentData, 2)
+      end
+      GatherItems[continent] = nil
+    end
+  end
+  for continent, continentData in GatherItems do
+    for zone, zoneData in continentData do
+      if (type(zone) == "number") then
+        local zoneName = VanillaZoneData[continent][zone];
+        if (zoneName) then
+          if (not GatherItems[continent][zoneName]) then
+            GatherItems[continent][zoneName] = {}
+          end
+          GatherItems[continent][zoneName] = deep_merge(
+                                                 GatherItems[continent][zoneName],
+                                                 zoneData, 1)
+        end
+        GatherItems[continent][zone] = nil
+      end
+    end
+  end
 end
 
 function Gatherer_GetZoneRegionData(continent, zone)
-  local c = GatherRegionData[continent];
+  local c = GatherRegionData.continents[Gatherer_GetContinentName(continent)];
   if (not c) then return nil; end
-  return c.zones[Gatherer_GetZoneName(continent, zone)];
+  return c[Gatherer_GetZoneName(continent, zone)];
 end
 
 function Gatherer_Round(x)
@@ -605,6 +671,7 @@ function Gatherer_OnEvent(event)
     if (arg1 and string.lower(arg1) == "gatherer") then
       Gatherer_Configuration.Load();
       GATHERER_LOADED = true;
+      Gatherer_migrateData()
       Gatherer_sanitizeDatabase(GatherItems)
       Gatherer_OnUpdate(0, true);
 
@@ -1123,10 +1190,12 @@ function GatherMain_Draw()
 
   if ((Gatherer_MapOpen) and (SETTINGS.useMainmap)) then
     local mapContinent = GetCurrentMapContinent();
+    local continentName = Gatherer_GetContinentName(mapContinent);
     local mapZone = GetCurrentMapZone();
-    if ((mapContinent > 0) and (GatherItems[mapContinent]) and
-        (GatherItems[mapContinent][mapZone])) then
-      for gatherName, gatherData in GatherItems[mapContinent][mapZone] do
+    local zoneName = Gatherer_GetZoneName(mapContinent, mapZone);
+    if ((mapContinent > 0) and (GatherItems[continentName]) and
+        (GatherItems[continentName][zoneName])) then
+      for gatherName, gatherData in GatherItems[continentName][zoneName] do
         local gatherType = "Default";
         local specificType = "";
         local allowed = true;
@@ -1350,15 +1419,17 @@ function Gatherer_FindClosest(num, interested)
     maxAllowable = SETTINGS.maxDist / 1000;
   end
 
-  if (not GatherItems[continent] or
-      (GatherItems[continent] and not GatherItems[continent][zone])) then
+  local continentName = Gatherer_GetContinentName(continent)
+  local zoneName = Gatherer_GetZoneName(continent, zone)
+  if (not GatherItems[continentName] or
+      (GatherItems[continentName] and not GatherItems[continentName][zoneName])) then
     return gatherLocal;
   end
 
   --	local gatherZone, gathersInZone;
-  --	for gatherZone, gathersInZone in GatherItems[continent] do
+  --	for gatherZone, gathersInZone in GatherItems[continentName] do
   local gatherName, gatherData;
-  for gatherName, gatherData in GatherItems[continent][zone] do
+  for gatherName, gatherData in GatherItems[continentName][zoneName] do
     --		for gatherName, gatherData in gathersInZone do
     local gatherType = "Default";
     local specificType = "";
@@ -1760,12 +1831,15 @@ function Gatherer_AddGatherToBase(gather, gatherType, gatherC, gatherZ, gatherX,
   -- this function was brought out into the global space and extended with the updateCount argument.
   -- The latter denotes whether the gather count should be incremented.
   -- Also it has started to return whether new node was found.
-  if (not GatherItems[gatherC]) then GatherItems[gatherC] = {}; end
-  if (not GatherItems[gatherC][gatherZ]) then
-    GatherItems[gatherC][gatherZ] = {};
+  local continentName = Gatherer_GetContinentName(gatherC)
+  local zoneName = Gatherer_GetZoneName(gatherC, gatherZ)
+  print(continentName .. " : " .. zoneName)
+  if (not GatherItems[continentName]) then GatherItems[continentName] = {}; end
+  if (not GatherItems[continentName][zoneName]) then
+    GatherItems[continentName][zoneName] = {};
   end
-  if (not GatherItems[gatherC][gatherZ][gather]) then
-    GatherItems[gatherC][gatherZ][gather] = {};
+  if (not GatherItems[continentName][zoneName][gather]) then
+    GatherItems[continentName][zoneName][gather] = {};
   end
 
   local maxCheckDist = 0.5;
@@ -1773,8 +1847,8 @@ function Gatherer_AddGatherToBase(gather, gatherType, gatherC, gatherZ, gatherX,
 
   local insertionIndex, newNodeFound;
   insertionIndex, newNodeFound, gatherX, gatherY =
-      insertionGatherIndex(GatherItems[gatherC][gatherZ][gather], maxCheckDist,
-                           gatherX, gatherY);
+      insertionGatherIndex(GatherItems[continentName][zoneName][gather],
+                           maxCheckDist, gatherX, gatherY);
 
   local countIncrement = 1;
   -- when gathered without required skill or received via broacast
@@ -1783,12 +1857,12 @@ function Gatherer_AddGatherToBase(gather, gatherType, gatherC, gatherZ, gatherX,
   end
 
   local newCount;
-  if (GatherItems[gatherC][gatherZ][gather][insertionIndex] == nil) then
-    GatherItems[gatherC][gatherZ][gather][insertionIndex] = {};
+  if (GatherItems[continentName][zoneName][gather][insertionIndex] == nil) then
+    GatherItems[continentName][zoneName][gather][insertionIndex] = {};
     newCount = countIncrement;
   else
-    newCount = GatherItems[gatherC][gatherZ][gather][insertionIndex].count +
-                   countIncrement;
+    newCount = GatherItems[continentName][zoneName][gather][insertionIndex]
+                   .count + countIncrement;
   end
 
   -- Round off those coordinates
@@ -1796,11 +1870,12 @@ function Gatherer_AddGatherToBase(gather, gatherType, gatherC, gatherZ, gatherX,
   gatherY = math.floor(gatherY * 100) / 100;
 
   assert(type(iconIndex) == 'number')
-  GatherItems[gatherC][gatherZ][gather][insertionIndex].x = gatherX;
-  GatherItems[gatherC][gatherZ][gather][insertionIndex].y = gatherY;
-  GatherItems[gatherC][gatherZ][gather][insertionIndex].gtype = gatherType;
-  GatherItems[gatherC][gatherZ][gather][insertionIndex].count = newCount;
-  GatherItems[gatherC][gatherZ][gather][insertionIndex].icon = iconIndex
+  GatherItems[continentName][zoneName][gather][insertionIndex].x = gatherX;
+  GatherItems[continentName][zoneName][gather][insertionIndex].y = gatherY;
+  GatherItems[continentName][zoneName][gather][insertionIndex].gtype =
+      gatherType;
+  GatherItems[continentName][zoneName][gather][insertionIndex].count = newCount;
+  GatherItems[continentName][zoneName][gather][insertionIndex].icon = iconIndex
 
   return newNodeFound;
 end
@@ -2040,35 +2115,33 @@ function Gatherer_DeleteItem()
   local zoneIdx = 0;
   local cntIdx = 0;
 
+  local continentName = Gatherer_GetContinentName(GatherMainMapItem.continent)
+  local zoneName = Gatherer_GetZoneName(GatherMainMapItem.continent,
+                                        GatherMainMapItem.zoneIndex)
+
   if (GatherMainMapItem.scope == "Node") then
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex] =
+    GatherItems[continentName][continentName][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex] =
         nil;
   elseif (GatherMainMapItem.scope == "Zone") then
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName] =
+    GatherItems[continentName][continentName][GatherMainMapItem.gatherName] =
         nil;
   elseif (GatherMainMapItem.scope == "Continent") then
     local search_index;
-    for search_index in GatherItems[GatherMainMapItem.continent] do
-      if (GatherItems[GatherMainMapItem.continent][search_index][GatherMainMapItem.gatherName]) then
-        GatherItems[GatherMainMapItem.continent][search_index][GatherMainMapItem.gatherName] =
+    for search_index in GatherItems[continentName] do
+      if (GatherItems[continentName][search_index][GatherMainMapItem.gatherName]) then
+        GatherItems[continentName][search_index][GatherMainMapItem.gatherName] =
             nil;
       end
     end
   elseif (GatherMainMapItem.scope == "World") then
     local search_index;
-    -- continent 1
-    if (GatherItems[1]) then
-      for search_index in GatherItems[1] do
-        if (GatherItems[1][search_index][GatherMainMapItem.gatherName]) then
-          GatherItems[1][search_index][GatherMainMapItem.gatherName] = nil;
-        end
-      end
-    end
-    -- continent 2
-    if (GatherItems[2]) then
-      for search_index in GatherItems[2] do
-        if (GatherItems[2][search_index][GatherMainMapItem.gatherName]) then
-          GatherItems[2][search_index][GatherMainMapItem.gatherName] = nil;
+    for i = 1, 2, 1 do
+      local name = Gatherer_GetContinentName(i)
+      if (GatherItems[name]) then
+        for search_index in GatherItems[name] do
+          if (GatherItems[name][search_index][GatherMainMapItem.gatherName]) then
+            GatherItems[name][search_index][GatherMainMapItem.gatherName] = nil;
+          end
         end
       end
     end
@@ -2077,30 +2150,26 @@ function Gatherer_DeleteItem()
 
   -- clean up for empty zones/continent
   for locIdx in
-      GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName] do
+      GatherItems[continentName][continentName][GatherMainMapItem.gatherName] do
     gathIdx = gathIdx + 1;
   end
 
   if (gathIdx == 0) then
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName] =
+    GatherItems[continentName][continentName][GatherMainMapItem.gatherName] =
         nil;
-    for locIdx in
-        GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex] do
+    for locIdx in GatherItems[continentName][continentName] do
       zoneIdx = zoneIdx + 1;
     end
 
     if (zoneIdx == 0) then
-      GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex] =
-          nil;
+      GatherItems[continentName][continentName] = nil;
 
       -- DEFAULT_CHAT_FRAME:AddMessage("Removed zone no data left")
-      for locIdx in GatherItems[GatherMainMapItem.continent] do
-        cntIdx = cntIdx + 1;
-      end
+      for locIdx in GatherItems[continentName] do cntIdx = cntIdx + 1; end
 
       if (cntIdx == 0) then
         -- DEFAULT_CHAT_FRAME:AddMessage("Removed continents no data left")
-        GatherItems[GatherMainMapItem.continent] = nil;
+        GatherItems[continentName] = nil;
       end
     end
   end
@@ -2110,8 +2179,9 @@ end
 -- Modify Gather Name and/or icon
 function Gatherer_ModifyItem()
   local newIcon, newGatherName, newType;
-  local mod_continent = GatherMainMapItem.continent;
-  local mod_zone = GatherMainMapItem.zoneIndex;
+  local mod_continent = Gatherer_GetContinentName(GatherMainMapItem.continent);
+  local mod_zone = Gatherer_ZoneName(GatherMainMapItem.continent,
+                                     GatherMainMapItem.zoneIndex);
   local mod_name = GatherMainMapItem.gatherName;
 
   -- setting new names (NB: icons on world map are deduced from gather name)
@@ -2216,63 +2286,36 @@ function Gatherer_ModifyItem()
 
   elseif (GatherMainMapItem.scope == "World") then
     local search_index;
-    -- continent 1
-    if (GatherItems[1]) then
-      for search_index in GatherItems[1] do
-        if (GatherItems[1][search_index][mod_name]) then
-          -- remove old entries if gather name different
-          if (GatherMainMapItem.newGatherName and mod_name ~=
-              GatherMainMapItem.newGatherName) then
-            GatherItems[1][search_index][newGatherName] = {};
-            GatherItems[1][search_index][newGatherName] =
-                GatherItems[1][search_index][mod_name];
-            GatherItems[1][search_index][mod_name] = nil;
-          end
-
-          -- replace icons if different
-          if (newIcon ~= GatherMainMapItem.gatherIcon) then
-            local index;
-            for index in GatherItems[1][search_index][newGatherName] do
-              GatherItems[1][search_index][newGatherName][index].icon = newIcon;
+    for i = 1, 2, 1 do
+      local name = Gatherer_GetContinentName(i)
+      if (GatherItems[name]) then
+        for search_index in GatherItems[name] do
+          if (GatherItems[name][search_index][mod_name]) then
+            -- remove old entries if gather name different
+            if (GatherMainMapItem.newGatherName and mod_name ~=
+                GatherMainMapItem.newGatherName) then
+              GatherItems[name][search_index][newGatherName] = {};
+              GatherItems[name][search_index][newGatherName] =
+                  GatherItems[name][search_index][mod_name];
+              GatherItems[name][search_index][mod_name] = nil;
             end
-          end
 
-          -- replace type if different
-          if (newType ~= GatherMainMapItem.gatherType) then
-            local index;
-            for index in GatherItems[1][search_index][newGatherName] do
-              GatherItems[1][search_index][newGatherName][index].gtype = newType;
+            -- replace icons if different
+            if (newIcon ~= GatherMainMapItem.gatherIcon) then
+              local index;
+              for index in GatherItems[name][search_index][newGatherName] do
+                GatherItems[name][search_index][newGatherName][index].icon =
+                    newIcon;
+              end
             end
-          end
-        end
-      end
-    end
-    -- continent 2
-    if (GatherItems[2]) then
-      for search_index in GatherItems[2] do
-        if (GatherItems[2][search_index][mod_name]) then
-          -- remove old entries if gather name different
-          if (GatherMainMapItem.newGatherName and mod_name ~=
-              GatherMainMapItem.newGatherName) then
-            GatherItems[2][search_index][newGatherName] = {};
-            GatherItems[2][search_index][newGatherName] =
-                GatherItems[2][search_index][mod_name];
-            GatherItems[2][search_index][mod_name] = nil;
-          end
 
-          -- replace icons if different
-          if (newIcon ~= GatherMainMapItem.gatherIcon) then
-            local index;
-            for index in GatherItems[2][search_index][newGatherName] do
-              GatherItems[2][search_index][newGatherName][index].icon = newIcon;
-            end
-          end
-
-          -- replace type if different
-          if (newType ~= GatherMainMapItem.gatherType) then
-            local index;
-            for index in GatherItems[2][search_index][newGatherName] do
-              GatherItems[2][search_index][newGatherName][index].gtype = newType;
+            -- replace type if different
+            if (newType ~= GatherMainMapItem.gatherType) then
+              local index;
+              for index in GatherItems[name][search_index][newGatherName] do
+                GatherItems[name][search_index][newGatherName][index].gtype =
+                    newType;
+              end
             end
           end
         end
@@ -2391,37 +2434,43 @@ end
 -- this one always ignore scope, only done on origin item.
 function Gatherer_ToggleBuggedItem()
   Gatherer_ChatPrint("Toggling node to bugged state");
+
+  local mod_continent = Gatherer_GetContinentName(GatherMainMapItem.continent);
+  local mod_zone = Gatherer_ZoneName(GatherMainMapItem.continent,
+                                     GatherMainMapItem.zoneIndex);
+  local mod_name = GatherMainMapItem.gatherName;
+
   local gtype =
-      GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+      GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
           .gtype;
   local icon =
-      GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+      GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
           .icon;
 
-  if (GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+  if (GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
       .icon ~= "default") then
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+    GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
         .oldicon = icon;
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+    GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
         .oldgtype = gtype;
 
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+    GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
         .icon = "default";
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+    GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
         .gtype = "Default";
   else
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+    GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
         .icon =
-        GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+        GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
             .oldicon;
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+    GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
         .gtype =
-        GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+        GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
             .oldgtype;
 
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+    GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
         .oldicon = nil;
-    GatherItems[GatherMainMapItem.continent][GatherMainMapItem.zoneIndex][GatherMainMapItem.gatherName][GatherMainMapItem.localIndex]
+    GatherItems[mod_continent][mod_zone][mod_name][GatherMainMapItem.localIndex]
         .oldgtype = nil;
   end
 

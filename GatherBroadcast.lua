@@ -7,8 +7,11 @@ function Gatherer_BroadcastGather(gather, gatherType, gatherC, gatherZ, gatherX,
 
     if Gatherer_Settings.debug then
         local prettyNodeName = gather;
-        local zones = {GetMapZones(gatherC)};
-        local prettyZoneName = zones[gatherZ];
+        local prettyZoneName = gatherZ;
+        if (type(gatherZ) == "number") then
+            local zones = {GetMapZones(gatherC)};
+            local prettyZoneName = zones[gatherZ];
+        end
         Gatherer_ChatNotify(
 			"Broadcasting new " .. prettyNodeName .. " node found in " .. prettyZoneName .. ".",
 			Gatherer_ENotificationType.sending
@@ -124,8 +127,11 @@ function Gatherer_ReceiveBroadcast(message)
     if sender ~= GetUnitName("player") then
         if Gatherer_Settings.debug then
             local prettyNodeName = gather;
-            local zones = {GetMapZones(gatherC)};
-            local prettyZoneName = zones[gatherZ];
+            local prettyZoneName = gatherZ;
+            if (type(gatherZ) == "number") then
+                local zones = {GetMapZones(gatherC)};
+                prettyZoneName = zones[gatherZ];
+            end
             Gatherer_ChatNotify(
                 Gatherer_coloredText(
 					sender, {170, 115, 255}
