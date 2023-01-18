@@ -33,6 +33,7 @@ GatherRegionData[2].scales[5] = { xscale = 37012.2, yscale = 25130.6 };
 
 GatherRegionData.continents = {
 	["Kalimdor"] = {
+		["Kalimdor"] = { scale = 0.825, xoffset = -0.19, yoffset = 0.06, xscale = 11016.6, yscale = 7399.9 },
 		["Ashenvale"] = { scale = 0.15670371525706, xoffset = 0.41757282062541, yoffset = 0.33126468682991 },
 		["Aszhara"] = { scale = 0.13779501505279, xoffset = 0.55282036918049, yoffset = 0.30400571307545 },
 		["Darkshore"] = { scale = 0.17799008894522, xoffset = 0.38383175154516, yoffset = 0.18206216123156 },
@@ -56,6 +57,7 @@ GatherRegionData.continents = {
 		["Winterspring"] = { scale = 0.19293573573141, xoffset = 0.47237382938446, yoffset = 0.17390990272233 }
 	},
 	["Eastern Kingdoms"] = {
+		["Eastern Kingdoms"] = { scale = 0.77, xoffset = 0.38, yoffset = 0.09, xscale = 10448.3, yscale = 7072.7, cityscale = 1.565 },
 		["Alterac Mountains"] = { scale = 0.07954563533736, xoffset = 0.43229874660542, yoffset = 0.25425926375262 },
 		["Arathi Highlands"] = { scale = 0.10227310921644, xoffset = 0.47916793249546, yoffset = 0.32386170078419 },
 		["Badlands"] = { scale = 0.07066771883566, xoffset = 0.51361415033147, yoffset = 0.56915717993261 },

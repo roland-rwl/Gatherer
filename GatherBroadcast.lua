@@ -1,5 +1,5 @@
 GATHERER_TOKEN_SEPARATOR = ";";
-GATHERER_ADDON_MESSAGE_PREFIX = "gatherer_p2p";
+GATHERER_ADDON_MESSAGE_PREFIX = "gatherer_turtle_p2p";
 
 function Gatherer_BroadcastGather(gather, gatherType, gatherC, gatherZ, gatherX, gatherY, iconIndex, gatherEventType)
     assert(type(iconIndex) == 'number')
